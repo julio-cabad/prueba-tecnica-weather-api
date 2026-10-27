@@ -21,7 +21,7 @@ export function createOpenMeteoForecast(options: OpenMeteoClientOptions): Foreca
       url.searchParams.set('timezone', city.timezone);
 
       const payload = await getJson(url, {
-        timeoutMs: options.timeoutMs,
+        signal: ctx.signal,
         service: 'forecast',
         logger: ctx.logger,
         ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),

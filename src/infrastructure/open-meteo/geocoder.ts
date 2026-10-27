@@ -13,7 +13,7 @@ export function createOpenMeteoGeocoder(options: OpenMeteoClientOptions): Geocod
       url.searchParams.set('language', 'es');
 
       const payload = await getJson(url, {
-        timeoutMs: options.timeoutMs,
+        signal: ctx.signal,
         service: 'geocoding',
         logger: ctx.logger,
         ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),

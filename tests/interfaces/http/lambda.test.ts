@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConfigError, INTERNAL_ERROR_MESSAGE } from '../../../src/domain/errors';
 import { createLambdaHandler } from '../../../src/interfaces/http/lambda';
+import { testContext } from '../../helpers/context';
 import { apiEvent, lambdaContext } from '../../helpers/events';
 
 describe('createLambdaHandler', () => {
@@ -36,12 +37,7 @@ describe('createLambdaHandler', () => {
       resolveDependencies: () => {
         builds += 1;
         return {
-          loggerFor: () => ({
-            debug() {},
-            info() {},
-            warn() {},
-            error() {},
-          }),
+          contextFor: () => testContext(),
           getCurrentWeather: async () => {
             throw new Error('unused');
           },

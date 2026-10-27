@@ -153,7 +153,7 @@ Si Open-Meteo no responde, responde con error o tarda más de 5 segundos, la API
 |---|---|---|
 | `GEOCODING_BASE_URL` | `https://geocoding-api.open-meteo.com` | Origen del geocoding. Sin path y sin credenciales. |
 | `FORECAST_BASE_URL` | `https://api.open-meteo.com` | Origen del forecast. |
-| `UPSTREAM_TIMEOUT_MS` | `5000` | Timeout de cada llamada. Entre 100 y 5000. Por defecto 5000. |
+| `UPSTREAM_TIMEOUT_MS` | `5000` | Presupuesto total por petición para Open-Meteo (geocoding + forecast). Entre 100 y 5000. Por defecto 5000. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` o `error`. |
 
 No hay API keys. Open-Meteo no pide registro para este uso. La plantilla SAM declara estos valores como parámetros.
@@ -174,9 +174,9 @@ Cada evento es una línea JSON. Como mínimo lleva `timestamp`, `level`, `messag
 - **Contrato en el caso de uso.** El nombre de la ciudad y el país son los del geocoding (`language=es`), no el query. Si hay varias coincidencias, Open-Meteo ya las ordena por relevancia y pedimos `count=1`: nos quedamos con la primera. Eso sigue el ejemplo del enunciado. El ranking del proveedor a veces sorprende: `New York` puede resolver a York, Nebraska. Un parámetro `country` lo arreglaría; quedó en las mejoras.
 - **Zona horaria del geocoding en el forecast.** `timezone=auto` también funciona. Pasar la zona ya resuelta deja `observedAt` alineado con el campo `timezone` del contrato. La hora se recorta a `YYYY-MM-DDTHH:mm`, que es la precisión del ejemplo.
 - **Códigos WMO agrupados, con 0–3 separados.** El ejemplo usa "Parcialmente nublado", que es el código 2, así que despejado, mayormente despejado, parcialmente nublado y nublado no se colapsan en una sola palabra. Niebla, llovizna, lluvia, nieve y tormenta cubren el resto de los grupos principales. Cualquier otro código responde "Condición desconocida" y no tumba la petición.
-- **Timeout por llamada, no un timeout opaco de la Lambda.** Cada `fetch` usa `AbortSignal.timeout` con `UPSTREAM_TIMEOUT_MS` (5 s). La Lambda espera 15 s: dos llamadas de 5 s más margen para devolver el 502. Un timeout, un HTTP no exitoso, un JSON inválido o un cuerpo enorme se traducen a `UPSTREAM_ERROR`. El cuerpo del proveedor no se copia ni al cliente ni al log.
+- **Un presupuesto de 5 s por petición, no por llamada.** El enunciado dice "si Open-Meteo tarda más de 5 segundos". Con un timeout por llamada, geocoding y forecast podrían sumar casi 10 s y aun así responder 200. Cada petición crea un solo `AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)` que comparten las dos llamadas: si entre ambas pasan de 5 s, la respuesta es 502. La Lambda espera 10 s, margen de sobra para un arranque en frío y para devolver el 502. Un timeout, un HTTP no exitoso, un JSON inválido o un cuerpo enorme se traducen a `UPSTREAM_ERROR`. El cuerpo del proveedor no se copia ni al cliente ni al log.
 - **Validación en el dominio.** Vacío o menos de 2 caracteres después de `trim`, más de 100 caracteres, o caracteres de control: `INVALID_REQUEST`. No rechazo letras, espacios, apóstrofos ni guiones, porque hay ciudades reales con esos caracteres. `São Paulo` y `St. John's` pasan.
-- **Configuración fail-closed.** Una URL con usuario, password, query o path se rechaza en la primera invocación, cuando se carga la configuración. El cliente recibe el 500 genérico. El log dice qué variable falló, no el valor (podría ser un secreto pegado por error). El timeout también está acotado a 5000 ms para que dos llamadas sigan cabiendo en los 15 s de la Lambda.
+- **Configuración fail-closed.** Una URL con usuario, password, query o path se rechaza en la primera invocación, cuando se carga la configuración. El cliente recibe el 500 genérico. El log dice qué variable falló, no el valor (podría ser un secreto pegado por error). El presupuesto también está acotado a 5000 ms, el umbral del contrato de errores.
 - **Un solo archivo para la Lambda.** El typecheck usa módulos ESM. `esbuild` empaqueta `src/handler.ts` en `dist/handler.js` (CommonJS, sin `node_modules`). El runtime Node 22 de Lambda trae desactivada la detección automática ESM/CJS, y un artefacto CommonJS evita ese problema. No hay dependencias de producción.
 - **Logs propios, sin Winston.** Una función de veinte líneas escribe el JSON a stdout, que es lo que CloudWatch recoge. El `requestId` de API Gateway gana sobre un header del cliente, para que no se pueda falsificar la correlación.
 
@@ -191,7 +191,7 @@ Vitest. Open-Meteo está simulado en todos los tests: no hay red. Cubren el mapa
 Elegí dos extras que documentan el contrato y cuidan el repo: OpenAPI (`openapi.yaml`) y el workflow de GitHub Actions (lint, typecheck, tests y build en Node 22). El resto lo dejaría para después, en este orden:
 
 1. **Caché de 10 minutos en DynamoDB con TTL**, clave el nombre normalizado de la ciudad, y DynamoDB Local en el arranque. Hoy cada request pega dos veces a Open-Meteo.
-2. **Reintentos con jitter** solo para timeout y HTTP 429/502/503, con un presupuesto que quepa en los 15 s de la Lambda. No reintentaría un 404 ni un 400 del proveedor.
+2. **Reintentos con jitter** solo para timeout y HTTP 429/502/503, dentro del mismo presupuesto de 5 s de la petición. No reintentaría un 404 ni un 400 del proveedor.
 3. **`country` opcional** para desambiguar homónimos (París, Francia frente a París, Texas). Hoy gana el primer resultado de Open-Meteo.
 4. **Métricas EMF** de latencia, estado del upstream y código de error, más una alarma sobre `UPSTREAM_ERROR`.
 5. **Prueba de contrato nocturna contra Open-Meteo real**, fuera del CI de cada push, para que la suite de PR siga siendo determinista.

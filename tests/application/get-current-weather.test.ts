@@ -3,9 +3,9 @@ import { createGetCurrentWeather } from '../../src/application/get-current-weath
 import type { ForecastProvider, Geocoder } from '../../src/application/ports';
 import { CityNotFoundError, InvalidRequestError, UpstreamError } from '../../src/domain/errors';
 import { bogotaCity, bogotaReport } from '../fixtures/bogota';
-import { noopLogger } from '../helpers/logger';
+import { testContext } from '../helpers/context';
 
-const ctx = { logger: noopLogger() };
+const ctx = testContext();
 
 describe('getCurrentWeather', () => {
   it('returns the localized city from geocoding, not the text the user typed', async () => {
@@ -49,7 +49,7 @@ describe('getCurrentWeather', () => {
     const geocoder = fakeGeocoder(bogotaCity);
     const forecast: ForecastProvider = {
       async getCurrent() {
-        throw new UpstreamError('Open-Meteo forecast exceeded 5000ms');
+        throw new UpstreamError('Open-Meteo forecast exceeded the request time budget');
       },
     };
 

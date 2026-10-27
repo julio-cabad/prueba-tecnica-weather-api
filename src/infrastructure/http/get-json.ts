@@ -9,7 +9,8 @@ export type UpstreamService = 'geocoding' | 'forecast';
 export type FetchLike = (input: URL, init?: RequestInit) => Promise<Response>;
 
 export interface GetJsonOptions {
-  readonly timeoutMs: number;
+  /** Presupuesto de la petición. Al abortarse, la llamada termina en UPSTREAM_ERROR. */
+  readonly signal: AbortSignal;
   readonly service: UpstreamService;
   readonly logger: Logger;
   readonly fetchImpl?: FetchLike;
@@ -26,7 +27,7 @@ export async function getJson(url: URL, options: GetJsonOptions): Promise<unknow
         accept: 'application/json',
         'user-agent': 'weather-api',
       },
-      signal: AbortSignal.timeout(options.timeoutMs),
+      signal: options.signal,
     });
 
     if (!response.ok) {
@@ -72,7 +73,7 @@ export async function getJson(url: URL, options: GetJsonOptions): Promise<unknow
 
     const timeout = isTimeoutError(error);
     const detail = timeout
-      ? `Open-Meteo ${options.service} exceeded ${options.timeoutMs}ms`
+      ? `Open-Meteo ${options.service} exceeded the request time budget`
       : `Open-Meteo ${options.service} request failed`;
 
     options.logger.error('upstream.failed', {

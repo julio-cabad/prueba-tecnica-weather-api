@@ -14,23 +14,19 @@ export interface CreateDependenciesOptions {
 /** Único lugar que conoce los adaptadores concretos. */
 export function createDependencies(options: CreateDependenciesOptions = {}): HandlerDependencies {
   const config = loadConfig(options.env ?? process.env);
-  const geocoder = createOpenMeteoGeocoder({
-    baseUrl: config.geocodingBaseUrl,
-    timeoutMs: config.upstreamTimeoutMs,
-    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-  });
-  const forecast = createOpenMeteoForecast({
-    baseUrl: config.forecastBaseUrl,
-    timeoutMs: config.upstreamTimeoutMs,
-    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-  });
+  const fetchOptions = options.fetchImpl ? { fetchImpl: options.fetchImpl } : {};
+  const geocoder = createOpenMeteoGeocoder({ baseUrl: config.geocodingBaseUrl, ...fetchOptions });
+  const forecast = createOpenMeteoForecast({ baseUrl: config.forecastBaseUrl, ...fetchOptions });
 
   return {
     getCurrentWeather: createGetCurrentWeather(geocoder, forecast),
-    loggerFor: (requestId) =>
-      createLogger({
+    contextFor: (requestId) => ({
+      logger: createLogger({
         requestId,
         level: config.logLevel,
       }),
+      // El reloj arranca con la petición y lo comparten las dos llamadas.
+      signal: AbortSignal.timeout(config.upstreamTimeoutMs),
+    }),
   };
 }

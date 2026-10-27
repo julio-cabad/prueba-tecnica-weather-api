@@ -3,7 +3,7 @@ import { createOpenMeteoForecast } from '../../../src/infrastructure/open-meteo/
 import { createOpenMeteoGeocoder } from '../../../src/infrastructure/open-meteo/geocoder';
 import type { FetchLike } from '../../../src/infrastructure/http/get-json';
 import { bogotaCity, bogotaForecast, bogotaGeocoding, bogotaReport } from '../../fixtures/bogota';
-import { noopLogger } from '../../helpers/logger';
+import { testContext } from '../../helpers/context';
 
 describe('Open-Meteo adapters', () => {
   it('searches by the trimmed city name and returns null when there are no results', async () => {
@@ -14,11 +14,10 @@ describe('Open-Meteo adapters', () => {
     };
     const geocoder = createOpenMeteoGeocoder({
       baseUrl: 'https://geocoding-api.open-meteo.com',
-      timeoutMs: 5000,
       fetchImpl,
     });
 
-    const city = await geocoder.search('Bogotá', { logger: noopLogger() });
+    const city = await geocoder.search('Bogotá', testContext());
 
     expect(city).toBeNull();
     expect(calls[0]?.searchParams.get('name')).toBe('Bogotá');
@@ -35,11 +34,10 @@ describe('Open-Meteo adapters', () => {
     };
     const forecast = createOpenMeteoForecast({
       baseUrl: 'https://api.open-meteo.com',
-      timeoutMs: 5000,
       fetchImpl,
     });
 
-    const current = await forecast.getCurrent(bogotaCity, { logger: noopLogger() });
+    const current = await forecast.getCurrent(bogotaCity, testContext());
 
     expect(current).toEqual(bogotaReport.current);
     expect(calls[0]?.pathname).toBe('/v1/forecast');
@@ -54,10 +52,9 @@ describe('Open-Meteo adapters', () => {
   it('parses a hit from geocoding', async () => {
     const geocoder = createOpenMeteoGeocoder({
       baseUrl: 'https://geocoding-api.open-meteo.com',
-      timeoutMs: 5000,
       fetchImpl: async () => Response.json(bogotaGeocoding),
     });
 
-    await expect(geocoder.search('Bogota', { logger: noopLogger() })).resolves.toEqual(bogotaCity);
+    await expect(geocoder.search('Bogota', testContext())).resolves.toEqual(bogotaCity);
   });
 });

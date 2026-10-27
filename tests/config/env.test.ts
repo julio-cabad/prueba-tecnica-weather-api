@@ -59,7 +59,7 @@ describe('loadConfig', () => {
     ).toThrow(ConfigError);
   });
 
-  it('accepts only timeouts that keep two upstream calls inside the Lambda budget', () => {
+  it('accepts budgets up to the 5 s threshold of the error contract', () => {
     expect(loadConfig({ ...validEnv, UPSTREAM_TIMEOUT_MS: '100' }).upstreamTimeoutMs).toBe(100);
     expect(loadConfig({ ...validEnv, UPSTREAM_TIMEOUT_MS: '5000' }).upstreamTimeoutMs).toBe(5000);
   });

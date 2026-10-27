@@ -9,7 +9,7 @@ describe('getJson', () => {
   it('returns the parsed JSON body', async () => {
     const logs = captureLogger();
     const payload = await getJson(url, {
-      timeoutMs: 5000,
+      signal: AbortSignal.timeout(5000),
       service: 'geocoding',
       logger: logs.logger,
       fetchImpl: async () => Response.json({ ok: true }),
@@ -26,7 +26,7 @@ describe('getJson', () => {
   it('maps a non-2xx response to a client-safe upstream error and does not read the body', async () => {
     const logs = captureLogger();
     const error = await getJson(url, {
-      timeoutMs: 5000,
+      signal: AbortSignal.timeout(5000),
       service: 'forecast',
       logger: logs.logger,
       fetchImpl: async () => new Response('secret-token', { status: 503 }),
@@ -41,7 +41,7 @@ describe('getJson', () => {
 
   it('maps invalid JSON to an upstream error', async () => {
     const error = await getJson(url, {
-      timeoutMs: 5000,
+      signal: AbortSignal.timeout(5000),
       service: 'geocoding',
       logger: captureLogger().logger,
       fetchImpl: async () => new Response('not-json', { status: 200 }),
@@ -53,7 +53,7 @@ describe('getJson', () => {
 
   it('maps a transport failure to an upstream error', async () => {
     const error = await getJson(url, {
-      timeoutMs: 5000,
+      signal: AbortSignal.timeout(5000),
       service: 'geocoding',
       logger: captureLogger().logger,
       fetchImpl: async () => {
@@ -65,7 +65,7 @@ describe('getJson', () => {
     expect((error as UpstreamError).logDetail).toContain('request failed');
   });
 
-  it('aborts when the upstream takes longer than the configured timeout', async () => {
+  it('aborts when the request budget runs out', async () => {
     const fetchImpl: FetchLike = (_input, init) =>
       new Promise((_resolve, reject) => {
         const signal = init?.signal;
@@ -84,19 +84,19 @@ describe('getJson', () => {
       });
 
     const error = await getJson(url, {
-      timeoutMs: 20,
+      signal: AbortSignal.timeout(20),
       service: 'forecast',
       logger: captureLogger().logger,
       fetchImpl,
     }).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(UpstreamError);
-    expect((error as UpstreamError).logDetail).toContain('exceeded 20ms');
+    expect((error as UpstreamError).logDetail).toContain('exceeded the request time budget');
   });
 
   it('rejects a body larger than the configured limit', async () => {
     const error = await getJson(url, {
-      timeoutMs: 5000,
+      signal: AbortSignal.timeout(5000),
       service: 'forecast',
       logger: captureLogger().logger,
       fetchImpl: async () =>

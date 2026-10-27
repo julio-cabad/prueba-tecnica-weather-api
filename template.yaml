@@ -15,7 +15,7 @@ Parameters:
     Type: String
     Default: "5000"
     AllowedPattern: "^[0-9]+$"
-    Description: Timeout por llamada a Open-Meteo, en milisegundos. La aplicación acepta de 100 a 5000.
+    Description: Presupuesto total por petición para Open-Meteo (geocoding + forecast), en milisegundos. La aplicación acepta de 100 a 5000.
   LogLevel:
     Type: String
     Default: info
@@ -30,9 +30,9 @@ Globals:
     Runtime: nodejs22.x
     Architectures:
       - arm64
-    # Dos llamadas upstream de hasta 5 s cada una (10 s en total). Los 15 s
-    # dejan margen para responder 502 antes de que la Lambda muera por timeout.
-    Timeout: 15
+    # Open-Meteo tiene 5 s en total por petición. Los 10 s dejan margen para un
+    # arranque en frío y para responder el 502 antes de que la Lambda muera.
+    Timeout: 10
     MemorySize: 256
     Environment:
       Variables:

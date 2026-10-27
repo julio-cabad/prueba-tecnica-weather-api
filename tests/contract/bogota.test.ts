@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { createDependencies } from '../../src/composition/container';
 import type { FetchLike } from '../../src/infrastructure/http/get-json';
 import { bogotaForecast, bogotaGeocoding, bogotaReport } from '../fixtures/bogota';
-import { noopLogger } from '../helpers/logger';
 
 describe('Bogotá contract', () => {
   it('turns the two Open-Meteo payloads into the public weather document', async () => {
@@ -16,7 +15,7 @@ describe('Bogotá contract', () => {
       throw new Error(`unexpected host ${input.hostname}`);
     };
 
-    const { getCurrentWeather } = createDependencies({
+    const { getCurrentWeather, contextFor } = createDependencies({
       env: {
         GEOCODING_BASE_URL: 'https://geocoding-api.open-meteo.com',
         FORECAST_BASE_URL: 'https://api.open-meteo.com',
@@ -26,7 +25,7 @@ describe('Bogotá contract', () => {
       fetchImpl,
     });
 
-    const report = await getCurrentWeather('Bogota', { logger: noopLogger() });
+    const report = await getCurrentWeather('Bogota', contextFor('req-contract'));
 
     expect(report).toEqual(bogotaReport);
     expect(JSON.stringify(report)).toBe(JSON.stringify(bogotaReport));

@@ -10,6 +10,7 @@ import {
 import { createHandler } from '../../../src/interfaces/http/create-handler';
 import { createLogger } from '../../../src/infrastructure/logging/logger';
 import { bogotaReport } from '../../fixtures/bogota';
+import { testContext } from '../../helpers/context';
 import { apiEvent, lambdaContext } from '../../helpers/events';
 
 describe('createHandler', () => {
@@ -17,7 +18,7 @@ describe('createHandler', () => {
     const lines: string[] = [];
     let receivedCity = '';
     const handler = createHandler({
-      loggerFor: (requestId) => createLogger({ requestId, level: 'info', sink: (line) => lines.push(line) }),
+      contextFor: (requestId) => testContext(createLogger({ requestId, level: 'info', sink: (line) => lines.push(line) })),
       getCurrentWeather: async (city) => {
         receivedCity = city;
         return bogotaReport;
@@ -45,11 +46,11 @@ describe('createHandler', () => {
   it.each([
     ['missing city', undefined, new InvalidRequestError("El parámetro 'city' es obligatorio y debe tener al menos 2 caracteres."), 400, 'INVALID_REQUEST'],
     ['unknown city', 'Ciudadinventada', new CityNotFoundError('Ciudadinventada'), 404, 'CITY_NOT_FOUND'],
-    ['upstream', 'Bogota', new UpstreamError('Open-Meteo forecast exceeded 5000ms'), 502, 'UPSTREAM_ERROR'],
+    ['upstream', 'Bogota', new UpstreamError('Open-Meteo forecast exceeded the request time budget'), 502, 'UPSTREAM_ERROR'],
   ] as const)('maps %s to the error envelope', async (_name, city, error, status, code) => {
     const lines: string[] = [];
     const handler = createHandler({
-      loggerFor: (requestId) => createLogger({ requestId, level: 'debug', sink: (line) => lines.push(line) }),
+      contextFor: (requestId) => testContext(createLogger({ requestId, level: 'debug', sink: (line) => lines.push(line) })),
       getCurrentWeather: rejecting(error),
     });
 
@@ -73,7 +74,7 @@ describe('createHandler', () => {
   it('masks unexpected failures, including their stack', async () => {
     const lines: string[] = [];
     const handler = createHandler({
-      loggerFor: (requestId) => createLogger({ requestId, level: 'error', sink: (line) => lines.push(line) }),
+      contextFor: (requestId) => testContext(createLogger({ requestId, level: 'error', sink: (line) => lines.push(line) })),
       getCurrentWeather: rejecting(new Error('database password=secret')),
     });
 

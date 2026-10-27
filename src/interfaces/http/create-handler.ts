@@ -1,13 +1,14 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import type { GetCurrentWeather } from '../../application/get-current-weather';
-import type { Logger } from '../../application/logger';
+import type { RequestContext } from '../../application/request-context';
 import { toErrorResponse } from './failure';
 import { resolveRequestId } from './request-id';
 import { json } from './response';
 
 export interface HandlerDependencies {
   readonly getCurrentWeather: GetCurrentWeather;
-  readonly loggerFor: (requestId: string) => Logger;
+  /** Logger y presupuesto de Open-Meteo de una petición. */
+  readonly contextFor: (requestId: string) => RequestContext;
 }
 
 export function createHandler(deps: HandlerDependencies) {
@@ -16,7 +17,8 @@ export function createHandler(deps: HandlerDependencies) {
     context: Context,
   ): Promise<APIGatewayProxyResult> {
     const requestId = resolveRequestId(event, context);
-    const logger = deps.loggerFor(requestId);
+    const ctx = deps.contextFor(requestId);
+    const { logger } = ctx;
     const started = Date.now();
     // API Gateway y Lambda usan ids distintos. sam local reutiliza el del gateway.
     const lambdaRequestId =
@@ -29,7 +31,7 @@ export function createHandler(deps: HandlerDependencies) {
         lambdaRequestId,
       });
 
-      const report = await deps.getCurrentWeather(readRawCity(event), { logger });
+      const report = await deps.getCurrentWeather(readRawCity(event), ctx);
       const statusCode = 200;
       logger.info('request.completed', {
         statusCode,

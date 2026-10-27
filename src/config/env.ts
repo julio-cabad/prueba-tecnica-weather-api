@@ -10,15 +10,15 @@ export interface AppConfig {
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MIN_TIMEOUT_MS = 100;
-// Dos llamadas de 5 s, más el arranque, caben en los 15 s de la Lambda. Un
-// timeout mayor podría dejar que Lambda muera antes de responder el 502.
+// El contrato de errores fija 5 s para Open-Meteo. Un presupuesto mayor
+// incumpliría ese umbral.
 const MAX_TIMEOUT_MS = 5_000;
 
 /**
  * Lee la configuración del proceso.
- * Las URLs son orígenes (sin path ni credenciales). El timeout de cada llamada
- * no supera los 5 s: dos llamadas más el arranque caben en los 15 s de la
- * Lambda y se respeta el umbral de 5 s del contrato de errores.
+ * Las URLs son orígenes (sin path ni credenciales). `UPSTREAM_TIMEOUT_MS` es el
+ * presupuesto total de una petición para Open-Meteo (geocoding + forecast) y
+ * no supera los 5 s del contrato de errores.
  */
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   return {
