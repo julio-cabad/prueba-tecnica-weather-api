@@ -57,7 +57,7 @@ npm test
 npm run local
 ```
 
-`npm run local` compila TypeScript y ejecuta `sam local start-api` en el puerto 3000. La primera vez Docker descarga la imagen del runtime.
+`npm run local` compila TypeScript, empaqueta el artefacto con `sam build` y ejecuta `sam local start-api` en el puerto 3000. La primera vez Docker descarga la imagen del runtime. El `sam build` intermedio evita que SAM reutilice un `.aws-sam/` viejo si ya habías construido antes.
 
 Otros comandos:
 
@@ -65,7 +65,8 @@ Otros comandos:
 npm run lint
 npm run typecheck
 npm run validate   # lint + typecheck + tests
-npm run build      # esbuild empaqueta dist/handler.js, el artefacto de la Lambda
+npm run build      # esbuild empaqueta dist/handler.js
+sam build          # copia dist/ al artefacto de SAM
 ```
 
 La plantilla usa `arm64` (Graviton). En Apple Silicon, `sam local` corre nativo. En una máquina Intel, cambia `Architectures` a `x86_64` en `template.yaml`.
@@ -152,7 +153,7 @@ Si Open-Meteo no responde, responde con error o tarda más de 5 segundos, la API
 |---|---|---|
 | `GEOCODING_BASE_URL` | `https://geocoding-api.open-meteo.com` | Origen del geocoding. Sin path y sin credenciales. |
 | `FORECAST_BASE_URL` | `https://api.open-meteo.com` | Origen del forecast. |
-| `UPSTREAM_TIMEOUT_MS` | `5000` | Timeout de cada llamada. Entre 100 y 10000. Por defecto 5000. |
+| `UPSTREAM_TIMEOUT_MS` | `5000` | Timeout de cada llamada. Entre 100 y 5000. Por defecto 5000. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` o `error`. |
 
 No hay API keys. Open-Meteo no pide registro para este uso. La plantilla SAM declara estos valores como parámetros.
@@ -175,7 +176,7 @@ Cada evento es una línea JSON. Como mínimo lleva `timestamp`, `level`, `messag
 - **Códigos WMO agrupados, con 0–3 separados.** El ejemplo usa "Parcialmente nublado", que es el código 2, así que despejado, mayormente despejado, parcialmente nublado y nublado no se colapsan en una sola palabra. Niebla, llovizna, lluvia, nieve y tormenta cubren el resto de los grupos principales. Cualquier otro código responde "Condición desconocida" y no tumba la petición.
 - **Timeout por llamada, no un timeout opaco de la Lambda.** Cada `fetch` usa `AbortSignal.timeout` con `UPSTREAM_TIMEOUT_MS` (5 s). La Lambda espera 15 s: dos llamadas de 5 s más margen para devolver el 502. Un timeout, un HTTP no exitoso, un JSON inválido o un cuerpo enorme se traducen a `UPSTREAM_ERROR`. El cuerpo del proveedor no se copia ni al cliente ni al log.
 - **Validación en el dominio.** Vacío o menos de 2 caracteres después de `trim`, más de 100 caracteres, o caracteres de control: `INVALID_REQUEST`. No rechazo letras, espacios, apóstrofos ni guiones, porque hay ciudades reales con esos caracteres. `São Paulo` y `St. John's` pasan.
-- **Configuración fail-closed.** Una URL con usuario, password, query o path se rechaza al arrancar. El cliente recibe el 500 genérico. El log dice qué variable falló, no el valor (podría ser un secreto pegado por error).
+- **Configuración fail-closed.** Una URL con usuario, password, query o path se rechaza en la primera invocación, cuando se carga la configuración. El cliente recibe el 500 genérico. El log dice qué variable falló, no el valor (podría ser un secreto pegado por error). El timeout también está acotado a 5000 ms para que dos llamadas sigan cabiendo en los 15 s de la Lambda.
 - **Un solo archivo para la Lambda.** El typecheck usa módulos ESM. `esbuild` empaqueta `src/handler.ts` en `dist/handler.js` (CommonJS, sin `node_modules`). El runtime Node 22 de Lambda trae desactivada la detección automática ESM/CJS, y un artefacto CommonJS evita ese problema. No hay dependencias de producción.
 - **Logs propios, sin Winston.** Una función de veinte líneas escribe el JSON a stdout, que es lo que CloudWatch recoge. El `requestId` de API Gateway gana sobre un header del cliente, para que no se pueda falsificar la correlación.
 

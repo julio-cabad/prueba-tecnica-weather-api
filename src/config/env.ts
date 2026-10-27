@@ -10,13 +10,15 @@ export interface AppConfig {
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MIN_TIMEOUT_MS = 100;
-const MAX_TIMEOUT_MS = 10_000;
+// Dos llamadas de 5 s, más el arranque, caben en los 15 s de la Lambda. Un
+// timeout mayor podría dejar que Lambda muera antes de responder el 502.
+const MAX_TIMEOUT_MS = 5_000;
 
 /**
  * Lee la configuración del proceso.
- * Las URLs son orígenes (sin path ni credenciales). El timeout cabe dos veces
- * dentro del timeout de 15 s de la Lambda, así un upstream lento sigue
- * pudiendo responder 502.
+ * Las URLs son orígenes (sin path ni credenciales). El timeout de cada llamada
+ * no supera los 5 s: dos llamadas más el arranque caben en los 15 s de la
+ * Lambda y se respeta el umbral de 5 s del contrato de errores.
  */
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   return {

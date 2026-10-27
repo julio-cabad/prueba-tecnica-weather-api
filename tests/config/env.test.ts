@@ -50,7 +50,7 @@ describe('loadConfig', () => {
     }
   });
 
-  it.each(['abc', '0', '99', '10001', '-5'])('rejects timeout %s', (timeout) => {
+  it.each(['abc', '0', '99', '5001', '10000', '-5'])('rejects timeout %s', (timeout) => {
     expect(() =>
       loadConfig({
         ...validEnv,
@@ -59,9 +59,9 @@ describe('loadConfig', () => {
     ).toThrow(ConfigError);
   });
 
-  it('accepts the timeout bounds that still fit in the Lambda budget', () => {
+  it('accepts only timeouts that keep two upstream calls inside the Lambda budget', () => {
     expect(loadConfig({ ...validEnv, UPSTREAM_TIMEOUT_MS: '100' }).upstreamTimeoutMs).toBe(100);
-    expect(loadConfig({ ...validEnv, UPSTREAM_TIMEOUT_MS: '10000' }).upstreamTimeoutMs).toBe(10000);
+    expect(loadConfig({ ...validEnv, UPSTREAM_TIMEOUT_MS: '5000' }).upstreamTimeoutMs).toBe(5000);
   });
 
   it('rejects an unknown log level', () => {
