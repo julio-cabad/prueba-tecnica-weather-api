@@ -47,7 +47,7 @@ sequenceDiagram
 
 - Node.js 22 o superior (`node -v`). El runtime de la Lambda es `nodejs22.x`. `.nvmrc` fija 22.
 - [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html)
-- Docker en ejecución. `sam local` levanta la Lambda en un contenedor. No hace falta cuenta de AWS ni credenciales para correr en local.
+- Docker en ejecución. `sam local` levanta la Lambda en un contenedor. No hace falta cuenta de AWS para correr en local (ver [Problemas frecuentes](#problemas-frecuentes) si SAM pide credenciales).
 
 ## Instalar, probar y correr
 
@@ -143,7 +143,35 @@ HTTP/1.1 404 Not Found
 }
 ```
 
-Si Open-Meteo no responde, responde con error o tarda más de 5 segundos, la API responde 502 `UPSTREAM_ERROR` con el mensaje "No fue posible obtener el clima en este momento." Un fallo no controlado responde 500 `INTERNAL_ERROR` con "Ocurrió un error interno." Ese cuerpo no lleva stack ni el mensaje interno. El detalle queda en el log, junto con `requestId`.
+Si Open-Meteo no responde, responde con error o tarda más de 5 segundos, la API responde 502 `UPSTREAM_ERROR`. Para verlo, apunta el forecast a una IP que no responde (los argumentos extra de `npm run local` son parámetros de la plantilla):
+
+```bash
+npm run local -- ForecastBaseUrl=http://10.255.255.1
+curl -sS -D - "http://127.0.0.1:3000/weather?city=Bogota"
+```
+
+```http
+HTTP/1.1 502 Bad Gateway
+```
+
+```json
+{
+  "error": {
+    "code": "UPSTREAM_ERROR",
+    "message": "No fue posible obtener el clima en este momento."
+  }
+}
+```
+
+El geocoding tarda, digamos, 0,9 s, y al forecast le quedan los 4,1 s restantes del presupuesto. El log lo muestra:
+
+```json
+{"service":"forecast","durationMs":4105,"detail":"Open-Meteo forecast exceeded the request time budget","timeout":true,"cause":"TimeoutError","level":"error","message":"upstream.failed","requestId":"..."}
+```
+
+Un fallo no controlado responde 500 `INTERNAL_ERROR` con "Ocurrió un error interno." Ese cuerpo no lleva stack ni el mensaje interno. El detalle queda en el log, junto con `requestId`.
+
+Los errores que genera API Gateway, que nunca llegan a la Lambda, usan el mismo sobre gracias a los `GatewayResponses` de `template.yaml`: una ruta o un método inexistente responde 404 `INVALID_REQUEST`, otro 4xx del gateway (por ejemplo throttling) `INVALID_REQUEST`, y una Lambda caída o sin respuesta 5xx `INTERNAL_ERROR`. `sam local` no emula los gateway responses: en local, `POST /weather` sigue respondiendo el 403 `Missing Authentication Token` de SAM. En AWS responde con el sobre.
 
 `X-Request-Id` de la respuesta es el `requestId` de API Gateway y sale en cada línea de log. El id de la invocación de Lambda, cuando es distinto, queda en `lambdaRequestId`. `sam local` repite el id del gateway entre requests; en AWS cada request trae uno nuevo.
 
@@ -172,6 +200,7 @@ Cada evento es una línea JSON. Como mínimo lleva `timestamp`, `level`, `messag
 - **SAM y API Gateway REST.** El enunciado muestra `sam local start-api`. El API REST es el que ese comando soporta bien. HTTP API (v2) queda fuera a propósito.
 - **Puertos, no un contenedor de inyección.** `Geocoder` y `ForecastProvider` son interfaces. `composition/container.ts` es el único archivo que importa las clases concretas de Open-Meteo. Los tests sustituyen el puerto o `fetch` y no salen a la red.
 - **Contrato en el caso de uso.** El nombre de la ciudad y el país son los del geocoding (`language=es`), no el query. Si hay varias coincidencias, Open-Meteo ya las ordena por relevancia y pedimos `count=1`: nos quedamos con la primera. Eso sigue el ejemplo del enunciado. El ranking del proveedor a veces sorprende: `New York` puede resolver a York, Nebraska. Un parámetro `country` lo arreglaría; quedó en las mejoras.
+- **`country` aunque Open-Meteo no lo mande.** Para lugares sin país reconocido, como Gaza, el geocoding solo trae `country_code` (`PS`). El nombre sale de ese código con `Intl.DisplayNames` en español ("Territorios Palestinos"), así una ciudad real no termina en 502. Si no viene ninguno de los dos, la respuesta del proveedor se trata como inválida.
 - **Zona horaria del geocoding en el forecast.** `timezone=auto` también funciona. Pasar la zona ya resuelta deja `observedAt` alineado con el campo `timezone` del contrato. La hora se recorta a `YYYY-MM-DDTHH:mm`, que es la precisión del ejemplo.
 - **Códigos WMO agrupados, con 0–3 separados.** El ejemplo usa "Parcialmente nublado", que es el código 2, así que despejado, mayormente despejado, parcialmente nublado y nublado no se colapsan en una sola palabra. Niebla, llovizna, lluvia, nieve y tormenta cubren el resto de los grupos principales. Cualquier otro código responde "Condición desconocida" y no tumba la petición.
 - **Un presupuesto de 5 s por petición, no por llamada.** El enunciado dice "si Open-Meteo tarda más de 5 segundos". Con un timeout por llamada, geocoding y forecast podrían sumar casi 10 s y aun así responder 200. Cada petición crea un solo `AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)` que comparten las dos llamadas: si entre ambas pasan de 5 s, la respuesta es 502. La Lambda espera 10 s, margen de sobra para un arranque en frío y para devolver el 502. Un timeout, un HTTP no exitoso, un JSON inválido o un cuerpo enorme se traducen a `UPSTREAM_ERROR`. El cuerpo del proveedor no se copia ni al cliente ni al log.
@@ -184,7 +213,17 @@ Cada evento es una línea JSON. Como mínimo lleva `timestamp`, `level`, `messag
 
 Vitest. Open-Meteo está simulado en todos los tests: no hay red. Cubren el mapa de códigos WMO, la transformación al contrato de Bogotá, la validación de `city`, los cuatro errores HTTP y que un 500 no filtra stack ni mensajes internos.
 
-`tests/contract/bogota.test.ts` recorre geocoder, forecast y caso de uso con los JSON de ejemplo y compara el documento completo, incluido el orden de las claves.
+`tests/contract/bogota.test.ts` recorre geocoder, forecast y caso de uso con los JSON de ejemplo y compara el documento completo, incluido el orden de las claves. `tests/composition/container.test.ts` comprueba que el presupuesto de 5 s es por petición: dos llamadas que caben solas pero no juntas terminan en `UPSTREAM_ERROR`. `tests/contract/spec-sync.test.ts` lee los gateway responses de `template.yaml` y valida que cada uno es el sobre de error.
+
+## Problemas frecuentes
+
+- **`sam local` falla buscando credenciales** (por ejemplo `MissingDependencyException ... botocore[crt]` con un perfil de `aws login`, o `The config profile ... could not be found`). `sam local` no llama a AWS, pero igual resuelve credenciales al arrancar. Sirven unas ficticias:
+
+  ```bash
+  env -u AWS_PROFILE AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1 npm run local
+  ```
+
+- **`No response from invoke container`** al forzar `Architecture=x86_64` en Apple Silicon. Es la emulación quedándose sin memoria. `npm run local` ya elige la arquitectura del host; no hace falta pasarla.
 
 ## Qué haría con más tiempo
 
@@ -211,6 +250,7 @@ src/infrastructure/logging/         logs JSON
 src/interfaces/http/                adaptador API Gateway
 src/config/env.ts                   variables de entorno
 template.yaml                       SAM: Lambda + API Gateway REST
+scripts/local.mjs                   npm run local con la arquitectura del host
 openapi.yaml                        contrato HTTP
 tests/                              Vitest, proveedor simulado
 ```
