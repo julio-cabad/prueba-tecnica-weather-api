@@ -22,6 +22,30 @@ describe('parseGeocodingPayload', () => {
     expect(parseGeocodingPayload(payload)).toBeNull();
   });
 
+  it('names the country from country_code when Open-Meteo omits it (Gaza)', () => {
+    const gaza = {
+      results: [
+        {
+          name: 'Gaza',
+          latitude: 31.50161,
+          longitude: 34.46672,
+          country_code: 'PS',
+          timezone: 'Asia/Gaza',
+        },
+      ],
+    };
+
+    expect(parseGeocodingPayload(gaza)?.country).toBe('Territorios Palestinos');
+  });
+
+  it('fails closed when neither country nor a valid country_code is present', () => {
+    const city = structuredClone(bogotaGeocoding.results[0]) as Record<string, unknown>;
+    delete city.country;
+    city.country_code = 'nope';
+
+    expect(() => parseGeocodingPayload({ results: [city] })).toThrow(UpstreamError);
+  });
+
   it('fails closed when the list is present but unusable', () => {
     expect(() => parseGeocodingPayload({ results: [{ name: 'Bogotá' }] })).toThrow(UpstreamError);
     expect(() => parseGeocodingPayload({ results: 'nope' })).toThrow(UpstreamError);

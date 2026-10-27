@@ -3,6 +3,8 @@ import { describeWeatherCode } from '../../domain/weather-codes';
 import type { CurrentConditions, GeocodedCity, Measurement } from '../../domain/weather-report';
 
 const OBSERVED_AT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2})?$/;
+const COUNTRY_CODE = /^[A-Z]{2}$/;
+const REGION_NAMES = new Intl.DisplayNames(['es'], { type: 'region' });
 
 /**
  * `null` significa ciudad inexistente (results ausente, null o vacío).
@@ -57,7 +59,7 @@ function parseCity(value: unknown): GeocodedCity {
 
   return {
     name: readString(value, 'name'),
-    country: readString(value, 'country'),
+    country: readCountry(value),
     latitude: readCoordinate(value, 'latitude', -90, 90),
     longitude: readCoordinate(value, 'longitude', -180, 180),
     timezone: readString(value, 'timezone'),
@@ -70,6 +72,24 @@ function readString(record: Record<string, unknown>, field: string): string {
     throw new UpstreamError(`Open-Meteo geocoding response is missing '${field}'`);
   }
   return value.trim();
+}
+
+/**
+ * Open-Meteo omite `country` en territorios sin país reconocido (Gaza trae
+ * solo `country_code: "PS"`). En ese caso el nombre sale del código ISO.
+ */
+function readCountry(record: Record<string, unknown>): string {
+  const country = record.country;
+  if (typeof country === 'string' && country.trim() !== '') {
+    return country.trim();
+  }
+
+  const code = record.country_code;
+  const name = typeof code === 'string' && COUNTRY_CODE.test(code) ? REGION_NAMES.of(code) : undefined;
+  if (name === undefined) {
+    throw new UpstreamError("Open-Meteo geocoding response is missing 'country'");
+  }
+  return name;
 }
 
 function readCoordinate(
