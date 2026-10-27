@@ -69,7 +69,13 @@ npm run build      # esbuild empaqueta dist/handler.js
 sam build          # copia dist/ al artefacto de SAM
 ```
 
-La plantilla usa `arm64` (Graviton). En Apple Silicon, `sam local` corre nativo. En una máquina Intel, cambia `Architectures` a `x86_64` en `template.yaml`.
+La arquitectura de la Lambda es el parámetro `Architecture` de la plantilla. Por defecto es `x86_64`, que `sam local` puede correr en cualquier host (en Apple Silicon, Docker la emula). Para correr nativo en Apple Silicon o desplegar en Graviton, más barato:
+
+```bash
+npm run build
+sam build --parameter-overrides Architecture=arm64
+sam local start-api --port 3000 --parameter-overrides Architecture=arm64
+```
 
 ## Ejemplos
 

@@ -12,7 +12,8 @@ describe('published contract', () => {
     expect(template).toMatch(/Path:\s*\/weather/);
     expect(template).toMatch(/Method:\s*get/);
     expect(template).toContain('nodejs22.x');
-    expect(template).toContain('arm64');
+    expect(template).toMatch(/Architectures:\s*\n\s*- !Ref Architecture/);
+    expect(template).toMatch(/Architecture:\s*\n\s*Type: String\s*\n\s*Default: x86_64/);
     expect(openapi).toContain('/weather:');
     expect(openapi).toMatch(/\n\s+get:/);
   });

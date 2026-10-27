@@ -16,6 +16,13 @@ Parameters:
     Default: "5000"
     AllowedPattern: "^[0-9]+$"
     Description: Presupuesto total por petición para Open-Meteo (geocoding + forecast), en milisegundos. La aplicación acepta de 100 a 5000.
+  Architecture:
+    Type: String
+    Default: x86_64
+    AllowedValues:
+      - x86_64
+      - arm64
+    Description: x86_64 corre en cualquier host con sam local. arm64 (Graviton) es más barato en AWS y nativo en Apple Silicon.
   LogLevel:
     Type: String
     Default: info
@@ -29,7 +36,7 @@ Globals:
   Function:
     Runtime: nodejs22.x
     Architectures:
-      - arm64
+      - !Ref Architecture
     # Open-Meteo tiene 5 s en total por petición. Los 10 s dejan margen para un
     # arranque en frío y para responder el 502 antes de que la Lambda muera.
     Timeout: 10
