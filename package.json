@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "build": "esbuild src/handler.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/handler.js --sourcemap",
     "validate": "npm run lint && npm run typecheck && npm test",
-    "local": "npm run build && sam build && sam local start-api --port 3000"
+    "local": "node scripts/local.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

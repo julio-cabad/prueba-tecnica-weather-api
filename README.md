@@ -57,7 +57,7 @@ npm test
 npm run local
 ```
 
-`npm run local` compila TypeScript, empaqueta el artefacto con `sam build` y ejecuta `sam local start-api` en el puerto 3000. La primera vez Docker descarga la imagen del runtime. El `sam build` intermedio evita que SAM reutilice un `.aws-sam/` viejo si ya habías construido antes.
+`npm run local` (`scripts/local.mjs`) compila TypeScript, empaqueta el artefacto con `sam build` y ejecuta `sam local start-api` en el puerto 3000, con la arquitectura de tu máquina (`arm64` en Apple Silicon, `x86_64` en el resto) para que Docker no tenga que emular. La primera vez Docker descarga la imagen del runtime. El `sam build` intermedio evita que SAM reutilice un `.aws-sam/` viejo si ya habías construido antes.
 
 Otros comandos:
 
@@ -69,13 +69,7 @@ npm run build      # esbuild empaqueta dist/handler.js
 sam build          # copia dist/ al artefacto de SAM
 ```
 
-La arquitectura de la Lambda es el parámetro `Architecture` de la plantilla. Por defecto es `x86_64`, que `sam local` puede correr en cualquier host (en Apple Silicon, Docker la emula). Para correr nativo en Apple Silicon o desplegar en Graviton, más barato:
-
-```bash
-npm run build
-sam build --parameter-overrides Architecture=arm64
-sam local start-api --port 3000 --parameter-overrides Architecture=arm64
-```
+La arquitectura de la Lambda es el parámetro `Architecture` de la plantilla. Por defecto es `x86_64`. `npm run local` lo ajusta al host: emular `x86_64` en Apple Silicon es lento y con 256 MB la invocación puede quedarse sin memoria. Para desplegar en Graviton, más barato, usa `sam deploy --parameter-overrides Architecture=arm64`.
 
 ## Ejemplos
 
