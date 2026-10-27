@@ -50,6 +50,20 @@ Resources:
       Name: weather-api
       StageName: Prod
       EndpointConfiguration: REGIONAL
+      # Los errores que genera API Gateway (ruta o método inexistente,
+      # throttling, Lambda caída o sin respuesta) nunca llegan a la Lambda.
+      # SAM los escribe en la definición del API con el mismo sobre de error.
+      GatewayResponses:
+        MISSING_AUTHENTICATION_TOKEN:
+          StatusCode: "404"
+          ResponseTemplates:
+            application/json: '{"error":{"code":"INVALID_REQUEST","message":"La ruta o el método no existe. Usa GET /weather?city={ciudad}."}}'
+        DEFAULT_4XX:
+          ResponseTemplates:
+            application/json: '{"error":{"code":"INVALID_REQUEST","message":"La petición no fue aceptada."}}'
+        DEFAULT_5XX:
+          ResponseTemplates:
+            application/json: '{"error":{"code":"INTERNAL_ERROR","message":"Ocurrió un error interno."}}'
 
   GetWeatherFunction:
     Type: AWS::Serverless::Function
