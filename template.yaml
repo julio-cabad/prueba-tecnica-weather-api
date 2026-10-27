@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: API de clima. API Gateway REST y Lambda adaptan Open-Meteo a un contrato propio.
+
+Parameters:
+  GeocodingBaseUrl:
+    Type: String
+    Default: https://geocoding-api.open-meteo.com
+    Description: Origen del servicio de geocoding. Sin path y sin credenciales.
+  ForecastBaseUrl:
+    Type: String
+    Default: https://api.open-meteo.com
+    Description: Origen del servicio de forecast. Sin path y sin credenciales.
+  UpstreamTimeoutMs:
+    Type: String
+    Default: "5000"
+    AllowedPattern: "^[0-9]+$"
+    Description: Timeout por llamada a Open-Meteo, en milisegundos. La aplicación acepta de 100 a 10000.
+  LogLevel:
+    Type: String
+    Default: info
+    AllowedValues:
+      - debug
+      - info
+      - warn
+      - error
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures:
+      - arm64
+    # Dos llamadas upstream de hasta 10 s en total. Los 15 s dejan margen para
+    # responder 502 antes de que la Lambda muera por timeout.
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        GEOCODING_BASE_URL: !Ref GeocodingBaseUrl
+        FORECAST_BASE_URL: !Ref ForecastBaseUrl
+        UPSTREAM_TIMEOUT_MS: !Ref UpstreamTimeoutMs
+        LOG_LEVEL: !Ref LogLevel
+    Tags:
+      Project: weather-api
+
+Resources:
+  WeatherApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: weather-api
+      StageName: Prod
+      EndpointConfiguration: REGIONAL
+
+  GetWeatherFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: weather-get-current
+      CodeUri: dist/
+      Handler: handler.handler
+      Description: Consulta el clima actual de una ciudad y lo devuelve en el contrato propio.
+      Events:
+        GetWeather:
+          Type: Api
+          Properties:
+            RestApiId: !Ref WeatherApi
+            Path: /weather
+            Method: get
+
+Outputs:
+  WeatherApiBaseUrl:
+    Description: URL base del stage
+    Value: !Sub "https://${WeatherApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+  WeatherEndpoint:
+    Description: Endpoint GET /weather
+    Value: !Sub "https://${WeatherApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/weather"
