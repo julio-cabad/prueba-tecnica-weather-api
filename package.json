@@ -1,0 +1,28 @@
+{
+  "name": "weather-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "API serverless de clima. API Gateway y Lambda adaptan Open-Meteo a un contrato propio.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/handler.js --sourcemap",
+    "validate": "npm run lint && npm run typecheck && npm test",
+    "local": "npm run build && sam local start-api --port 3000"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/aws-lambda": "^8.10.164",
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  }
+}
