@@ -1,0 +1,191 @@
+openapi: 3.0.3
+info:
+  title: Weather API
+  version: 1.0.0
+  description: |
+    Clima actual por ciudad. La API consulta Open-Meteo y devuelve un contrato
+    propio. No expone la respuesta cruda del proveedor.
+servers:
+  - url: http://127.0.0.1:3000
+    description: SAM local
+  - url: https://{apiId}.execute-api.{region}.amazonaws.com/Prod
+    description: API Gateway
+    variables:
+      apiId:
+        default: api-id
+      region:
+        default: us-east-1
+paths:
+  /weather:
+    get:
+      operationId: getCurrentWeather
+      summary: Clima actual de una ciudad
+      parameters:
+        - $ref: "#/components/parameters/City"
+      responses:
+        "200":
+          description: Clima actual traducido al contrato propio.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeatherReport"
+              example:
+                city: Bogotá
+                country: Colombia
+                coordinates:
+                  latitude: 4.60971
+                  longitude: -74.08175
+                timezone: America/Bogota
+                current:
+                  temperature:
+                    value: 14.2
+                    unit: °C
+                  humidity:
+                    value: 78
+                    unit: "%"
+                  windSpeed:
+                    value: 6.5
+                    unit: km/h
+                  condition: Parcialmente nublado
+                  observedAt: "2026-10-27T09:00"
+        "400":
+          description: Falta `city`, está vacío o tiene menos de 2 caracteres.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: INVALID_REQUEST
+                  message: El parámetro 'city' es obligatorio y debe tener al menos 2 caracteres.
+        "404":
+          description: El geocoding no devolvió resultados para esa ciudad.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: CITY_NOT_FOUND
+                  message: No se encontró la ciudad 'Ciudadinventada'
+        "502":
+          description: Open-Meteo falló, respondió con error o superó el timeout de 5 segundos.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: UPSTREAM_ERROR
+                  message: No fue posible obtener el clima en este momento.
+        "500":
+          description: Error no controlado. La respuesta no incluye stack ni detalle interno.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Ocurrió un error interno.
+components:
+  parameters:
+    City:
+      name: city
+      in: query
+      required: true
+      description: Nombre de la ciudad. Se envía a Open-Meteo Geocoding con `count=1` y `language=es`.
+      schema:
+        type: string
+        minLength: 2
+        maxLength: 100
+        example: Bogota
+  headers:
+    RequestId:
+      description: Identificador de la petición. Coincide con el campo `requestId` de los logs.
+      schema:
+        type: string
+  schemas:
+    Measurement:
+      type: object
+      required: [value, unit]
+      properties:
+        value:
+          type: number
+        unit:
+          type: string
+          description: Unidad informada por Open-Meteo en `current_units`.
+    WeatherReport:
+      type: object
+      required: [city, country, coordinates, timezone, current]
+      properties:
+        city:
+          type: string
+          description: Nombre localizado devuelto por el geocoding, no el texto consultado.
+        country:
+          type: string
+        coordinates:
+          type: object
+          required: [latitude, longitude]
+          properties:
+            latitude:
+              type: number
+              minimum: -90
+              maximum: 90
+            longitude:
+              type: number
+              minimum: -180
+              maximum: 180
+        timezone:
+          type: string
+          example: America/Bogota
+        current:
+          type: object
+          required: [temperature, humidity, windSpeed, condition, observedAt]
+          properties:
+            temperature:
+              $ref: "#/components/schemas/Measurement"
+            humidity:
+              $ref: "#/components/schemas/Measurement"
+            windSpeed:
+              $ref: "#/components/schemas/Measurement"
+            condition:
+              type: string
+              description: Descripción en español del `weather_code` WMO.
+              example: Parcialmente nublado
+            observedAt:
+              type: string
+              description: Hora local `YYYY-MM-DDTHH:mm`, sin sufijo de zona.
+              example: "2026-10-27T09:00"
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_REQUEST
+                - CITY_NOT_FOUND
+                - UPSTREAM_ERROR
+                - INTERNAL_ERROR
+            message:
+              type: string
