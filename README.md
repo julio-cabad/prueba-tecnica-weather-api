@@ -4,6 +4,8 @@ API serverless (Amazon API Gateway + AWS Lambda) que consulta [Open-Meteo](https
 
 `GET /weather?city=Bogota` no devuelve el JSON del proveedor. Resuelve la ciudad, pide el tiempo actual y responde siempre el mismo documento o el mismo sobre de error.
 
+**Desplegada en AWS:** [`https://tn648nnanf.execute-api.us-east-2.amazonaws.com/Prod/weather?city=Bogota`](https://tn648nnanf.execute-api.us-east-2.amazonaws.com/Prod/weather?city=Bogota) (ver [Despliegue en AWS](#despliegue-en-aws)).
+
 ## Arquitectura
 
 El handler es un adaptador. No conoce Open-Meteo ni arma el documento de clima.
@@ -175,6 +177,33 @@ Los errores que genera API Gateway, que nunca llegan a la Lambda, usan el mismo 
 
 `X-Request-Id` de la respuesta es el `requestId` de API Gateway y sale en cada línea de log. El id de la invocación de Lambda, cuando es distinto, queda en `lambdaRequestId`. `sam local` repite el id del gateway entre requests; en AWS cada request trae uno nuevo.
 
+## Despliegue en AWS
+
+La API está desplegada en mi cuenta personal, región `us-east-2`, con `Architecture=arm64` (Graviton):
+
+```bash
+curl -sS "https://tn648nnanf.execute-api.us-east-2.amazonaws.com/Prod/weather?city=Bogota"
+```
+
+Responde el mismo contrato que en local. Aquí sí actúan los gateway responses que `sam local` no emula: `POST /weather` o una ruta inexistente responden 404 con el sobre de error. En CloudWatch, cada línea de log es un JSON con el mismo `requestId` que el cliente recibe en `X-Request-Id`.
+
+Para desplegar desde cero (si usas `aws login`, mira [Problemas frecuentes](#problemas-frecuentes)):
+
+```bash
+npm run build
+sam build --parameter-overrides Architecture=arm64
+sam deploy --stack-name weather-api --region us-east-2 --resolve-s3 \
+  --capabilities CAPABILITY_IAM --parameter-overrides Architecture=arm64
+```
+
+Para borrar el stack (Lambda, API y rol) y sus artefactos cuando termine la evaluación:
+
+```bash
+sam delete --stack-name weather-api --region us-east-2
+```
+
+`sam delete` no toca dos cosas que viven fuera del stack: el grupo de logs `/aws/lambda/weather-get-current`, que Lambda crea en la primera invocación, y el stack `aws-sam-cli-managed-default`, el bucket que SAM comparte entre despliegues de la región. Si no los usas para nada más, bórralos aparte (el bucket hay que vaciarlo antes).
+
 ## Variables de entorno
 
 | Variable | Ejemplo | Rol |
@@ -223,18 +252,29 @@ Vitest. Open-Meteo está simulado en todos los tests: no hay red. Cubren el mapa
   env -u AWS_PROFILE AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1 npm run local
   ```
 
+- **`sam deploy` falla con `Credentials were refreshed, but the refreshed credentials are still expired`** después de `eval "$(aws configure export-credentials --format env)"`. `aws login` entrega credenciales que duran 15 minutos: exportadas a variables de entorno ya no se renuevan y caducan a mitad del despliegue. SAM tampoco lee `aws login` directamente (le falta `botocore[crt]`). La salida es un perfil que le pide al AWS CLI credenciales nuevas cada vez que hacen falta:
+
+  ```ini
+  # ~/.aws/config
+  [profile sam]
+  region = us-east-2
+  credential_process = aws configure export-credentials --profile default --format process
+  ```
+
+  Luego `sam deploy --profile sam ...` y `sam delete --profile sam ...`.
+
 - **`No response from invoke container`** al forzar `Architecture=x86_64` en Apple Silicon. Es la emulación quedándose sin memoria. `npm run local` ya elige la arquitectura del host; no hace falta pasarla.
 
 ## Qué haría con más tiempo
 
-Elegí dos extras que documentan el contrato y cuidan el repo: OpenAPI (`openapi.yaml`) y el workflow de GitHub Actions (lint, typecheck, tests y build en Node 22). El resto lo dejaría para después, en este orden:
+Elegí dos extras que documentan el contrato y cuidan el repo: OpenAPI (`openapi.yaml`) y el workflow de GitHub Actions (lint, typecheck, tests y build en Node 22). Aparte, como entregable opcional, la API está [desplegada en AWS](#despliegue-en-aws). El resto lo dejaría para después, en este orden:
 
 1. **Caché de 10 minutos en DynamoDB con TTL**, clave el nombre normalizado de la ciudad, y DynamoDB Local en el arranque. Hoy cada request pega dos veces a Open-Meteo.
 2. **Reintentos con jitter** solo para timeout y HTTP 429/502/503, dentro del mismo presupuesto de 5 s de la petición. No reintentaría un 404 ni un 400 del proveedor.
 3. **`country` opcional** para desambiguar homónimos (París, Francia frente a París, Texas). Hoy gana el primer resultado de Open-Meteo.
 4. **Métricas EMF** de latencia, estado del upstream y código de error, más una alarma sobre `UPSTREAM_ERROR`.
 5. **Prueba de contrato nocturna contra Open-Meteo real**, fuera del CI de cada push, para que la suite de PR siga siendo determinista.
-6. **Despliegue a una cuenta personal** con `sam deploy`. La plantilla ya publica `WeatherEndpoint`. Después de la evaluación hay que borrar el stack.
+6. **Throttling del stage y una alarma de costo** para el endpoint público. Hoy solo lo limitan las cuotas por defecto de la cuenta.
 7. **`GET /weather/history`** con las últimas 10 consultas, cuando exista la tabla del caché.
 
 ## Estructura
