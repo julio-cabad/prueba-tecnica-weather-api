@@ -173,7 +173,41 @@ El geocoding tarda, digamos, 0,9 s, y al forecast le quedan los 4,1 s restantes 
 
 Un fallo no controlado responde 500 `INTERNAL_ERROR` con "Ocurrió un error interno." Ese cuerpo no lleva stack ni el mensaje interno. El detalle queda en el log, junto con `requestId`.
 
-Los errores que genera API Gateway, que nunca llegan a la Lambda, usan el mismo sobre gracias a los `GatewayResponses` de `template.yaml`: una ruta o un método inexistente responde 404 `INVALID_REQUEST`, otro 4xx del gateway (por ejemplo throttling) `INVALID_REQUEST`, y una Lambda caída o sin respuesta 5xx `INTERNAL_ERROR`. `sam local` no emula los gateway responses: en local, `POST /weather` sigue respondiendo el 403 `Missing Authentication Token` de SAM. En AWS responde con el sobre.
+Otro método sobre `/weather` responde 405 y dice cuál sí se acepta:
+
+```bash
+curl -sS -i -X POST "http://127.0.0.1:3000/weather?city=Bogota"
+```
+
+```http
+HTTP/1.1 405 Method Not Allowed
+Allow: GET
+X-Request-Id: ...
+```
+
+```json
+{
+  "error": {
+    "code": "METHOD_NOT_ALLOWED",
+    "message": "Método no permitido. Usa GET /weather?city={ciudad}."
+  }
+}
+```
+
+Cualquier otra ruta (`/noexiste`, `/weather/extra`, `/`) responde 404:
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "La ruta no existe. Usa GET /weather?city={ciudad}."
+  }
+}
+```
+
+Los dos los responde la Lambda, igual en local que en AWS, con `X-Request-Id` y su línea de log.
+
+Lo que API Gateway responde sin llegar a la Lambda usa el mismo sobre gracias a los `GatewayResponses` de `template.yaml`, y con el status que ese código tiene en el resto del contrato: throttling 429 `TOO_MANY_REQUESTS`, otro 4xx del gateway 400 `INVALID_REQUEST`, y una Lambda caída o sin respuesta 500 `INTERNAL_ERROR`. Esas respuestas no llevan `X-Request-Id`, porque API Gateway solo deja poner en sus headers parámetros de la petición o texto fijo, no el id. El id llega igual en `x-amzn-RequestId`, que API Gateway agrega a todas las respuestas y que coincide con `X-Request-Id` cuando responde la Lambda. `sam local` no emula los gateway responses.
 
 `X-Request-Id` de la respuesta es el `requestId` de API Gateway y sale en cada línea de log. El id de la invocación de Lambda, cuando es distinto, queda en `lambdaRequestId`. `sam local` repite el id del gateway entre requests; en AWS cada request trae uno nuevo.
 
@@ -185,7 +219,7 @@ La API está desplegada en mi cuenta personal, región `us-east-2`, con `Archite
 curl -sS "https://tn648nnanf.execute-api.us-east-2.amazonaws.com/Prod/weather?city=Bogota"
 ```
 
-Responde el mismo contrato que en local. Aquí sí actúan los gateway responses que `sam local` no emula: `POST /weather` o una ruta inexistente responden 404 con el sobre de error. En CloudWatch, cada línea de log es un JSON con el mismo `requestId` que el cliente recibe en `X-Request-Id`.
+Responde el mismo contrato que en local, incluidos el 405 de `POST /weather` y el 404 de una ruta inexistente. En CloudWatch, cada línea de log es un JSON con el mismo `requestId` que el cliente recibe en `X-Request-Id`.
 
 Para desplegar desde cero (si usas `aws login`, mira [Problemas frecuentes](#problemas-frecuentes)):
 
@@ -232,6 +266,7 @@ Cada evento es una línea JSON. Como mínimo lleva `timestamp`, `level`, `messag
 - **`country` aunque Open-Meteo no lo mande.** Para lugares sin país reconocido, como Gaza, el geocoding solo trae `country_code` (`PS`). El nombre sale de ese código con `Intl.DisplayNames` en español ("Territorios Palestinos"), así una ciudad real no termina en 502. Si no viene ninguno de los dos, la respuesta del proveedor se trata como inválida.
 - **Zona horaria del geocoding en el forecast.** `timezone=auto` también funciona. Pasar la zona ya resuelta deja `observedAt` alineado con el campo `timezone` del contrato. La hora se recorta a `YYYY-MM-DDTHH:mm`, que es la precisión del ejemplo.
 - **Códigos WMO agrupados, con 0–3 separados.** El ejemplo usa "Parcialmente nublado", que es el código 2, así que despejado, mayormente despejado, parcialmente nublado y nublado no se colapsan en una sola palabra. Niebla, llovizna, lluvia, nieve y tormenta cubren el resto de los grupos principales. Cualquier otro código responde "Condición desconocida" y no tumba la petición.
+- **Rutas y métodos fuera del contrato los responde la Lambda.** API Gateway REST no distingue una ruta inexistente de un método no soportado: los dos son `MISSING_AUTHENTICATION_TOKEN`, un 403. Con `ANY /weather`, `ANY /` y `ANY /{proxy+}`, la Lambda recibe todo y la capa HTTP responde 405 `METHOD_NOT_ALLOWED` con `Allow: GET` o 404 `NOT_FOUND`. Así esas respuestas llevan `X-Request-Id` y log, y se comportan igual en `sam local`. El costo es una invocación por petición basura, despreciable aquí. Los códigos de rutas viven en `interfaces/http`, no en el dominio.
 - **Un presupuesto de 5 s por petición, no por llamada.** El enunciado dice "si Open-Meteo tarda más de 5 segundos". Con un timeout por llamada, geocoding y forecast podrían sumar casi 10 s y aun así responder 200. Cada petición crea un solo `AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)` que comparten las dos llamadas: si entre ambas pasan de 5 s, la respuesta es 502. La Lambda espera 10 s, margen de sobra para un arranque en frío y para devolver el 502. Un timeout, un HTTP no exitoso, un JSON inválido o un cuerpo enorme se traducen a `UPSTREAM_ERROR`. El cuerpo del proveedor no se copia ni al cliente ni al log.
 - **Validación en el dominio.** Vacío o menos de 2 caracteres después de `trim`, más de 100 caracteres, o caracteres de control: `INVALID_REQUEST`. No rechazo letras, espacios, apóstrofos ni guiones, porque hay ciudades reales con esos caracteres. `São Paulo` y `St. John's` pasan.
 - **Configuración fail-closed.** Una URL con usuario, password, query o path se rechaza en la primera invocación, cuando se carga la configuración. El cliente recibe el 500 genérico. El log dice qué variable falló, no el valor (podría ser un secreto pegado por error). El presupuesto también está acotado a 5000 ms, el umbral del contrato de errores.
@@ -242,7 +277,7 @@ Cada evento es una línea JSON. Como mínimo lleva `timestamp`, `level`, `messag
 
 Vitest. Open-Meteo está simulado en todos los tests: no hay red. Cubren el mapa de códigos WMO, la transformación al contrato de Bogotá, la validación de `city`, los cuatro errores HTTP y que un 500 no filtra stack ni mensajes internos.
 
-`tests/contract/bogota.test.ts` recorre geocoder, forecast y caso de uso con los JSON de ejemplo y compara el documento completo, incluido el orden de las claves. `tests/composition/container.test.ts` comprueba que el presupuesto de 5 s es por petición: dos llamadas que caben solas pero no juntas terminan en `UPSTREAM_ERROR`. `tests/contract/spec-sync.test.ts` lee los gateway responses de `template.yaml` y valida que cada uno es el sobre de error.
+`tests/contract/bogota.test.ts` recorre geocoder, forecast y caso de uso con los JSON de ejemplo y compara el documento completo, incluido el orden de las claves. `tests/composition/container.test.ts` comprueba que el presupuesto de 5 s es por petición: dos llamadas que caben solas pero no juntas terminan en `UPSTREAM_ERROR`. `tests/contract/spec-sync.test.ts` lee `template.yaml`: valida que toda ruta y método llega a la Lambda y que cada gateway response es el sobre de error con el status que su código tiene en el resto del contrato.
 
 ## Problemas frecuentes
 
