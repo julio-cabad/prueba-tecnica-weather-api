@@ -29,16 +29,16 @@ describe('createDependencies', () => {
   });
 
   it('gives each request a fresh budget', async () => {
-    const fetchImpl: FetchLike = (input, init) =>
-      respondAfter(20, input.pathname === '/v1/search' ? bogotaGeocoding : bogotaForecast, init?.signal);
-    const { getCurrentWeather, contextFor } = createDependencies({ env, fetchImpl });
+    const { contextFor } = createDependencies({ env });
+    const first = contextFor('req-1');
+    // Espera a que el presupuesto de la primera petición se agote de verdad,
+    // sin suponer cuánto tarda un timer en una máquina cargada.
+    await new Promise((resolve) => first.signal.addEventListener('abort', resolve, { once: true }));
 
-    await getCurrentWeather('Bogota', contextFor('req-1'));
-    await new Promise((resolve) => setTimeout(resolve, 160));
+    const second = contextFor('req-2');
 
-    await expect(getCurrentWeather('Bogota', contextFor('req-2'))).resolves.toMatchObject({
-      city: 'Bogotá',
-    });
+    expect(first.signal.aborted).toBe(true);
+    expect(second.signal.aborted).toBe(false);
   });
 });
 
