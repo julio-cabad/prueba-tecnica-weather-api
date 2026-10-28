@@ -4,32 +4,39 @@ export function apiEvent(options?: {
   city?: string;
   requestId?: string;
   headers?: Record<string, string>;
+  httpMethod?: string;
+  /** Ruta que eligió API Gateway: `/weather`, `/` o `/{proxy+}`. */
+  resource?: string;
+  path?: string;
 }): APIGatewayProxyEvent {
   const queryStringParameters =
     options && 'city' in options && options.city !== undefined ? { city: options.city } : null;
+  const httpMethod = options?.httpMethod ?? 'GET';
+  const resource = options?.resource ?? '/weather';
+  const path = options?.path ?? '/weather';
 
   return {
     body: null,
     headers: options?.headers ?? {},
     multiValueHeaders: {},
-    httpMethod: 'GET',
+    httpMethod,
     isBase64Encoded: false,
-    path: '/weather',
+    path,
     pathParameters: null,
     queryStringParameters,
     multiValueQueryStringParameters: null,
     stageVariables: null,
-    resource: '/weather',
+    resource,
     requestContext: {
       accountId: '123456789012',
       apiId: 'local',
       protocol: 'HTTP/1.1',
-      httpMethod: 'GET',
-      path: '/weather',
+      httpMethod,
+      path,
       stage: 'Prod',
       requestTimeEpoch: 0,
       resourceId: 'weather',
-      resourcePath: '/weather',
+      resourcePath: resource,
       requestId: options?.requestId ?? 'req-123',
       authorizer: undefined,
       identity: {

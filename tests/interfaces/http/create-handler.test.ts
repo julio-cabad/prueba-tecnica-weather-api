@@ -71,6 +71,60 @@ describe('createHandler', () => {
     expect(failure.level).toBe(status >= 500 ? 'error' : 'warn');
   });
 
+  it.each(['POST', 'PUT', 'DELETE', 'PATCH'])(
+    'answers %s /weather with 405 and Allow: GET without calling the use case',
+    async (httpMethod) => {
+      const lines: string[] = [];
+      const getCurrentWeather = spyOnUseCase();
+      const handler = createHandler({
+        contextFor: (requestId) => testContext(createLogger({ requestId, level: 'debug', sink: (line) => lines.push(line) })),
+        getCurrentWeather,
+      });
+
+      const response = await handler(apiEvent({ city: 'Bogota', httpMethod, requestId: 'req-405' }), lambdaContext());
+
+      expect(response.statusCode).toBe(405);
+      expect(response.headers).toMatchObject({
+        Allow: 'GET',
+        'Content-Type': 'application/json; charset=utf-8',
+        'X-Request-Id': 'req-405',
+      });
+      expect(JSON.parse(response.body)).toEqual({
+        error: { code: 'METHOD_NOT_ALLOWED', message: 'Método no permitido. Usa GET /weather?city={ciudad}.' },
+      });
+      expect(getCurrentWeather.calls).toBe(0);
+      expect(JSON.parse(lines.at(-1) ?? '{}')).toMatchObject({
+        level: 'warn',
+        message: 'request.failed',
+        code: 'METHOD_NOT_ALLOWED',
+        requestId: 'req-405',
+      });
+    },
+  );
+
+  it.each([
+    ['/{proxy+}', '/noexiste', 'GET'],
+    ['/{proxy+}', '/weather/extra', 'GET'],
+    ['/{proxy+}', '/noexiste', 'POST'],
+    ['/', '/', 'GET'],
+  ])('answers resource %s (path %s, %s) with 404 NOT_FOUND', async (resource, path, httpMethod) => {
+    const getCurrentWeather = spyOnUseCase();
+    const handler = createHandler({ contextFor: () => testContext(), getCurrentWeather });
+
+    const response = await handler(
+      apiEvent({ city: 'Bogota', resource, path, httpMethod, requestId: 'req-404' }),
+      lambdaContext(),
+    );
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers?.['X-Request-Id']).toBe('req-404');
+    expect(response.headers).not.toHaveProperty('Allow');
+    expect(JSON.parse(response.body)).toEqual({
+      error: { code: 'NOT_FOUND', message: 'La ruta no existe. Usa GET /weather?city={ciudad}.' },
+    });
+    expect(getCurrentWeather.calls).toBe(0);
+  });
+
   it('masks unexpected failures, including their stack', async () => {
     const lines: string[] = [];
     const handler = createHandler({
@@ -93,6 +147,17 @@ describe('createHandler', () => {
     expect(logged.stack).toContain('password');
   });
 });
+
+function spyOnUseCase(): GetCurrentWeather & { calls: number } {
+  const useCase = Object.assign(
+    async () => {
+      useCase.calls += 1;
+      return bogotaReport;
+    },
+    { calls: 0 },
+  );
+  return useCase;
+}
 
 function rejecting(error: unknown): GetCurrentWeather {
   return async () => {

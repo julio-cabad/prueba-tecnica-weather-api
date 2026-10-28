@@ -57,14 +57,15 @@ Resources:
       Name: weather-api
       StageName: Prod
       EndpointConfiguration: REGIONAL
-      # Los errores que genera API Gateway (ruta o método inexistente,
-      # throttling, Lambda caída o sin respuesta) nunca llegan a la Lambda.
-      # SAM los escribe en la definición del API con el mismo sobre de error.
+      # Lo que API Gateway responde sin llegar a la Lambda (throttling, Lambda
+      # caída o sin respuesta) sale con el mismo sobre de error. SAM lo escribe
+      # en la definición del API. MISSING_AUTHENTICATION_TOKEN es una ruta sin
+      # método: no debería ocurrir con los ANY de abajo, pero queda de respaldo.
       GatewayResponses:
         MISSING_AUTHENTICATION_TOKEN:
           StatusCode: "404"
           ResponseTemplates:
-            application/json: '{"error":{"code":"INVALID_REQUEST","message":"La ruta o el método no existe. Usa GET /weather?city={ciudad}."}}'
+            application/json: '{"error":{"code":"NOT_FOUND","message":"La ruta no existe. Usa GET /weather?city={ciudad}."}}'
         DEFAULT_4XX:
           ResponseTemplates:
             application/json: '{"error":{"code":"INVALID_REQUEST","message":"La petición no fue aceptada."}}'
@@ -79,13 +80,29 @@ Resources:
       CodeUri: dist/
       Handler: handler.handler
       Description: Consulta el clima actual de una ciudad y lo devuelve en el contrato propio.
+      # El contrato es GET /weather, pero API Gateway REST no distingue una ruta
+      # inexistente de un método no soportado. Toda ruta y método llega a la
+      # Lambda, que responde 404 NOT_FOUND o 405 METHOD_NOT_ALLOWED con el mismo
+      # sobre, X-Request-Id y log, igual en AWS que en sam local.
       Events:
-        GetWeather:
+        Weather:
           Type: Api
           Properties:
             RestApiId: !Ref WeatherApi
             Path: /weather
-            Method: get
+            Method: any
+        Root:
+          Type: Api
+          Properties:
+            RestApiId: !Ref WeatherApi
+            Path: /
+            Method: any
+        OtherPaths:
+          Type: Api
+          Properties:
+            RestApiId: !Ref WeatherApi
+            Path: /{proxy+}
+            Method: any
 
 Outputs:
   WeatherApiBaseUrl:

@@ -1,16 +1,16 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ERROR_CODES } from '../../src/domain/errors';
+import { PUBLIC_ERROR_CODES } from '../../src/interfaces/http/failure';
 
 const root = process.cwd();
 const template = readFileSync(path.join(root, 'template.yaml'), 'utf8');
 const openapi = readFileSync(path.join(root, 'openapi.yaml'), 'utf8');
 
 describe('published contract', () => {
-  it('declares GET /weather in SAM and in OpenAPI', () => {
-    expect(template).toMatch(/Path:\s*\/weather/);
-    expect(template).toMatch(/Method:\s*get/);
+  it('documents GET /weather and routes every path and method to the Lambda', () => {
+    const routes = [...template.matchAll(/Path: (\S+)\n\s+Method: (\S+)/g)].map((m) => `${m[2]} ${m[1]}`);
+    expect(routes).toEqual(['any /weather', 'any /', 'any /{proxy+}']);
     expect(template).toContain('nodejs22.x');
     expect(template).toMatch(/Architectures:\s*\n\s*- !Ref Architecture/);
     expect(template).toMatch(/Architecture:\s*\n\s*Type: String\s*\n\s*Default: x86_64/);
@@ -29,14 +29,14 @@ describe('published contract', () => {
     expect(bodies).toHaveLength(3);
     for (const body of bodies) {
       expect(Object.keys(body)).toEqual(['error']);
-      expect(ERROR_CODES).toContain(body.error.code);
+      expect(PUBLIC_ERROR_CODES).toContain(body.error.code);
       expect(body.error.message).not.toBe('');
     }
   });
 
-  it('documents every error code from the assignment', () => {
-    for (const code of ['INVALID_REQUEST', 'CITY_NOT_FOUND', 'UPSTREAM_ERROR', 'INTERNAL_ERROR']) {
-      expect(openapi).toContain(code);
+  it('documents every public error code in OpenAPI', () => {
+    for (const code of PUBLIC_ERROR_CODES) {
+      expect(openapi).toMatch(new RegExp(`- ${code}\\n`));
     }
   });
 });

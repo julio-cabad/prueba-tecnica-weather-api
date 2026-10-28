@@ -36,7 +36,7 @@ export function createLambdaHandler(options: LambdaHandlerOptions = {}) {
         detail: failure.logDetail,
         ...(failure.stack ? { stack: failure.stack } : {}),
       });
-      return json(failure.statusCode, failure.body, requestId);
+      return json(failure.statusCode, failure.body, requestId, failure.headers);
     }
   };
 }

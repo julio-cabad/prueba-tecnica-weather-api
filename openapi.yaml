@@ -5,6 +5,10 @@ info:
   description: |
     Clima actual por ciudad. La API consulta Open-Meteo y devuelve un contrato
     propio. No expone la respuesta cruda del proveedor.
+
+    Solo existe `GET /weather`. Cualquier otro método sobre `/weather` responde
+    405 `METHOD_NOT_ALLOWED` con el header `Allow: GET`, y cualquier otra ruta
+    responde 404 `NOT_FOUND`, ambos con el sobre `ErrorEnvelope`.
 servers:
   - url: http://127.0.0.1:3000
     description: SAM local
@@ -187,5 +191,7 @@ components:
                 - CITY_NOT_FOUND
                 - UPSTREAM_ERROR
                 - INTERNAL_ERROR
+                - NOT_FOUND
+                - METHOD_NOT_ALLOWED
             message:
               type: string

@@ -4,6 +4,7 @@ import type { RequestContext } from '../../application/request-context';
 import { toErrorResponse } from './failure';
 import { resolveRequestId } from './request-id';
 import { json } from './response';
+import { assertWeatherRoute } from './route';
 
 export interface HandlerDependencies {
   readonly getCurrentWeather: GetCurrentWeather;
@@ -31,6 +32,7 @@ export function createHandler(deps: HandlerDependencies) {
         lambdaRequestId,
       });
 
+      assertWeatherRoute(event);
       const report = await deps.getCurrentWeather(readRawCity(event), ctx);
       const statusCode = 200;
       logger.info('request.completed', {
@@ -56,7 +58,7 @@ export function createHandler(deps: HandlerDependencies) {
         logger.warn('request.failed', fields);
       }
 
-      return json(failure.statusCode, failure.body, requestId);
+      return json(failure.statusCode, failure.body, requestId, failure.headers);
     }
   };
 }
