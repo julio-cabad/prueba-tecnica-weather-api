@@ -1,8 +1,11 @@
 import { AppError, ERROR_CODES, INTERNAL_ERROR_MESSAGE, type ErrorCode } from '../../domain/errors';
 import { RouteError, WEATHER_METHODS } from './route';
 
-/** Códigos que agrega la capa HTTP. El dominio no sabe de rutas. */
-export const HTTP_ERROR_CODES = ['NOT_FOUND', 'METHOD_NOT_ALLOWED'] as const;
+/**
+ * Códigos que agrega la capa HTTP. El dominio no sabe de rutas ni de
+ * throttling; TOO_MANY_REQUESTS solo lo responde API Gateway.
+ */
+export const HTTP_ERROR_CODES = ['NOT_FOUND', 'METHOD_NOT_ALLOWED', 'TOO_MANY_REQUESTS'] as const;
 
 export type PublicErrorCode = ErrorCode | (typeof HTTP_ERROR_CODES)[number];
 
@@ -14,6 +17,7 @@ const STATUS_BY_CODE: Record<PublicErrorCode, number> = {
   CITY_NOT_FOUND: 404,
   NOT_FOUND: 404,
   METHOD_NOT_ALLOWED: 405,
+  TOO_MANY_REQUESTS: 429,
   UPSTREAM_ERROR: 502,
   INTERNAL_ERROR: 500,
 };

@@ -9,6 +9,7 @@ describe('HTTP error mapping', () => {
     ['CITY_NOT_FOUND', 404],
     ['NOT_FOUND', 404],
     ['METHOD_NOT_ALLOWED', 405],
+    ['TOO_MANY_REQUESTS', 429],
     ['UPSTREAM_ERROR', 502],
     ['INTERNAL_ERROR', 500],
   ] as const)('maps %s to HTTP %s', (code, status) => {
@@ -23,6 +24,7 @@ describe('HTTP error mapping', () => {
       'INTERNAL_ERROR',
       'NOT_FOUND',
       'METHOD_NOT_ALLOWED',
+      'TOO_MANY_REQUESTS',
     ]);
   });
 

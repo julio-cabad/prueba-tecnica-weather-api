@@ -9,6 +9,11 @@ info:
     Solo existe `GET /weather`. Cualquier otro método sobre `/weather` responde
     405 `METHOD_NOT_ALLOWED` con el header `Allow: GET`, y cualquier otra ruta
     responde 404 `NOT_FOUND`, ambos con el sobre `ErrorEnvelope`.
+
+    Las respuestas que genera API Gateway sin llegar a la Lambda usan el mismo
+    sobre: 429 `TOO_MANY_REQUESTS` (throttling), 400 `INVALID_REQUEST` (otro
+    4xx del gateway) y 500 `INTERNAL_ERROR`. No llevan `X-Request-Id`; el id de
+    la petición viaja en `x-amzn-RequestId`.
 servers:
   - url: http://127.0.0.1:3000
     description: SAM local
@@ -94,6 +99,16 @@ paths:
                 error:
                   code: UPSTREAM_ERROR
                   message: No fue posible obtener el clima en este momento.
+        "429":
+          description: API Gateway limitó la tasa de peticiones (throttling).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: TOO_MANY_REQUESTS
+                  message: Demasiadas peticiones. Intenta de nuevo en unos segundos.
         "500":
           description: Error no controlado. La respuesta no incluye stack ni detalle interno.
           headers:
@@ -193,5 +208,6 @@ components:
                 - INTERNAL_ERROR
                 - NOT_FOUND
                 - METHOD_NOT_ALLOWED
+                - TOO_MANY_REQUESTS
             message:
               type: string

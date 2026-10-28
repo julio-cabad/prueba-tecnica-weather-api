@@ -58,18 +58,26 @@ Resources:
       StageName: Prod
       EndpointConfiguration: REGIONAL
       # Lo que API Gateway responde sin llegar a la Lambda (throttling, Lambda
-      # caída o sin respuesta) sale con el mismo sobre de error. SAM lo escribe
-      # en la definición del API. MISSING_AUTHENTICATION_TOKEN es una ruta sin
-      # método: no debería ocurrir con los ANY de abajo, pero queda de respaldo.
+      # caída o sin respuesta) sale con el mismo sobre de error y con el status
+      # que ese código tiene en el resto del contrato. SAM lo escribe en la
+      # definición del API. MISSING_AUTHENTICATION_TOKEN es una ruta sin método:
+      # no debería ocurrir con los ANY de abajo, pero queda de respaldo.
       GatewayResponses:
         MISSING_AUTHENTICATION_TOKEN:
           StatusCode: "404"
           ResponseTemplates:
             application/json: '{"error":{"code":"NOT_FOUND","message":"La ruta no existe. Usa GET /weather?city={ciudad}."}}'
-        DEFAULT_4XX:
+        THROTTLED:
+          StatusCode: "429"
           ResponseTemplates:
-            application/json: '{"error":{"code":"INVALID_REQUEST","message":"La petición no fue aceptada."}}'
+            application/json: '{"error":{"code":"TOO_MANY_REQUESTS","message":"Demasiadas peticiones. Intenta de nuevo en unos segundos."}}'
+        DEFAULT_4XX:
+          StatusCode: "400"
+          ResponseTemplates:
+            application/json: '{"error":{"code":"INVALID_REQUEST","message":"La petición no es válida."}}'
+        # El enunciado: cualquier error no controlado es 500 INTERNAL_ERROR.
         DEFAULT_5XX:
+          StatusCode: "500"
           ResponseTemplates:
             application/json: '{"error":{"code":"INTERNAL_ERROR","message":"Ocurrió un error interno."}}'
 
